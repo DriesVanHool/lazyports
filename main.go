@@ -9,14 +9,9 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/DriesVanHool/lazyports/internal/buildinfo"
 	"github.com/DriesVanHool/lazyports/internal/ports"
 	"github.com/DriesVanHool/lazyports/internal/ui"
-)
-
-var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
 )
 
 func main() {
@@ -127,9 +122,9 @@ func printUsage() {
 }
 
 func printVersion() {
-	fmt.Printf("lazyports %s\n", version)
-	fmt.Printf("commit: %s\n", commit)
-	fmt.Printf("built: %s\n", date)
+	fmt.Printf("lazyports %s\n", buildinfo.Version)
+	fmt.Printf("commit: %s\n", buildinfo.Commit)
+	fmt.Printf("built: %s\n", buildinfo.Date)
 }
 
 func formatLocal(entry ports.Entry) string {

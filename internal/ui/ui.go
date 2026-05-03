@@ -10,33 +10,39 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 
+	"github.com/DriesVanHool/lazyports/internal/buildinfo"
 	"github.com/DriesVanHool/lazyports/internal/ports"
 )
 
 var (
-	frameStyle       = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240")).Padding(0, 1)
-	toolbarStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
-	tableFrameStyle  = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("238")).Padding(0, 1)
-	helpStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	statusStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("108")).Bold(true)
-	errorStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Bold(true)
-	detailStyle      = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("241")).Background(lipgloss.Color("235")).Padding(1, 2)
-	searchStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-	headerStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("255"))
-	subtitleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("246"))
-	selectedStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Background(lipgloss.Color("237")).Bold(true)
-	emptyStateStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("246")).Italic(true)
-	keyStyle         = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("223"))
-	sepStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	labelStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("223"))
-	valueStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-	modalTitleStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("230"))
-	badgeStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("223")).Background(lipgloss.Color("237")).Padding(0, 1)
-	logoStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("223")).Bold(true)
-	compactLogoStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("223")).Bold(true)
+	frameStyle         = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240")).Padding(0, 1)
+	toolbarStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+	tableFrameStyle    = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("238")).Padding(0, 1)
+	helpStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	statusStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("108")).Bold(true)
+	errorStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Bold(true)
+	detailStyle        = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240")).Padding(1, 2)
+	modalBackdropStyle = lipgloss.NewStyle().Faint(true)
+	searchStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	headerStyle        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("255"))
+	subtitleStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("246"))
+	versionStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	selectedStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Background(lipgloss.Color("237")).Bold(true)
+	emptyStateStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("246")).Italic(true)
+	keyStyle           = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("223"))
+	sepStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	labelStyle         = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("223"))
+	valueStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+	modalTitleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("230"))
+	badgeStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("223")).Background(lipgloss.Color("237")).Padding(0, 1)
+	logoStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("223")).Bold(true)
+	compactLogoStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("223")).Bold(true)
 )
+
+const tableCellHorizontalFrame = 2
 
 const appTitle = "██╗      █████╗ ███████╗██╗   ██╗██████╗  ██████╗ ██████╗ ████████╗███████╗\n" +
 	"██║     ██╔══██╗╚══███╔╝╚██╗ ██╔╝██╔══██╗██╔═══██╗██╔══██╗╚══██╔══╝██╔════╝\n" +
@@ -102,9 +108,9 @@ func newModel() model {
 	)
 
 	styles := table.DefaultStyles()
-	styles.Header = styles.Header.Bold(true).Foreground(lipgloss.Color("255")).BorderStyle(lipgloss.NormalBorder()).BorderBottom(true).BorderForeground(lipgloss.Color("240"))
-	styles.Cell = styles.Cell.Foreground(lipgloss.Color("252"))
-	styles.Selected = selectedStyle
+	styles.Header = styles.Header.Bold(true).Foreground(lipgloss.Color("255")).BorderStyle(lipgloss.NormalBorder()).BorderBottom(true).BorderForeground(lipgloss.Color("240")).Padding(0, 1)
+	styles.Cell = styles.Cell.Foreground(lipgloss.Color("252")).Padding(0, 1)
+	styles.Selected = selectedStyle.Padding(0, 1)
 	t.SetStyles(styles)
 
 	input := textinput.New()
@@ -318,14 +324,15 @@ func (m *model) resize(width, height int) {
 }
 
 func (m *model) updateTableLayout() {
-	available := max(16, m.width-14)
+	available := max(minTableRenderedWidth(), m.width-frameStyle.GetHorizontalFrameSize()-tableFrameStyle.GetHorizontalFrameSize())
+	contentWidth := max(minTableContentWidth(), available-(len(m.table.Columns())*tableCellHorizontalFrame))
 	portWidth := 6
 	pidWidth := 7
 	protocolWidth := 10
 	stateWidth := 14
-	processWidth := max(8, available-(portWidth+pidWidth+protocolWidth+stateWidth))
+	processWidth := max(8, contentWidth-(portWidth+pidWidth+protocolWidth+stateWidth))
 
-	deficit := (portWidth + pidWidth + protocolWidth + stateWidth + processWidth) - available
+	deficit := (portWidth + pidWidth + protocolWidth + stateWidth + processWidth) - contentWidth
 	if deficit > 0 {
 		shrink := min(deficit, stateWidth-8)
 		stateWidth -= shrink
@@ -623,9 +630,11 @@ func formatKillStatus(pid int, result ports.TerminateResult) string {
 }
 
 func renderBanner(width, height int) string {
-	logo := compactLogoStyle.Render("LAZYPORTS")
+	logo := compactLogoStyle.Render("LAZYPORTS") + " " + versionStyle.Render(buildinfo.Version)
 	if width >= lipgloss.Width(appTitle)+6 {
-		logo = logoStyle.Render(appTitle)
+		logoLines := strings.Split(logoStyle.Render(appTitle), "\n")
+		logoLines[0] += "  " + versionStyle.Render(buildinfo.Version)
+		logo = strings.Join(logoLines, "\n")
 	}
 	lines := []string{
 		logo,
@@ -646,7 +655,11 @@ func renderToolbar(mode string, count int, searching bool) string {
 }
 
 func renderField(label, value string) string {
-	return labelStyle.Render(label+":") + " " + valueStyle.Render(value)
+	if strings.TrimSpace(value) == "" {
+		value = "-"
+	}
+	key := labelStyle.Width(10).Render(label + ":")
+	return key + " " + valueStyle.Render(value)
 }
 
 func (m model) modalWidth() int {
@@ -659,7 +672,29 @@ func (m model) renderModal(base string, content string) string {
 	}
 
 	modal := detailStyle.Width(m.modalWidth()).Render(content)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
+	backdrop := modalBackdropStyle.Render(lipgloss.Place(m.width, m.height, lipgloss.Left, lipgloss.Top, base))
+	return overlayCentered(backdrop, modal, m.width, m.height)
+}
+
+func overlayCentered(base, overlay string, width, height int) string {
+	baseLines := strings.Split(lipgloss.Place(width, height, lipgloss.Left, lipgloss.Top, base), "\n")
+	overlayLines := strings.Split(overlay, "\n")
+	overlayWidth, overlayHeight := lipgloss.Size(overlay)
+	startX := max(0, (width-overlayWidth)/2)
+	startY := max(0, (height-overlayHeight)/2)
+
+	for row, overlayLine := range overlayLines {
+		lineIndex := startY + row
+		if lineIndex < 0 || lineIndex >= len(baseLines) {
+			continue
+		}
+		baseLine := baseLines[lineIndex]
+		left := ansi.Cut(baseLine, 0, startX)
+		right := ansi.Cut(baseLine, startX+overlayWidth, width)
+		baseLines[lineIndex] = left + overlayLine + right
+	}
+
+	return strings.Join(baseLines, "\n")
 }
 
 func bannerHeight(width int) int {
@@ -709,4 +744,12 @@ func frameVerticalSize() int {
 
 func tableFrameVerticalSize() int {
 	return 2
+}
+
+func minTableContentWidth() int {
+	return 26
+}
+
+func minTableRenderedWidth() int {
+	return minTableContentWidth() + (5 * tableCellHorizontalFrame)
 }

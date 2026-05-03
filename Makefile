@@ -3,7 +3,7 @@ DIST := dist
 VERSION ?= dev
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || printf 'none')
 DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
+LDFLAGS := -s -w -X github.com/DriesVanHool/lazyports/internal/buildinfo.Version=$(VERSION) -X github.com/DriesVanHool/lazyports/internal/buildinfo.Commit=$(COMMIT) -X github.com/DriesVanHool/lazyports/internal/buildinfo.Date=$(DATE)
 
 .PHONY: build test fmt cross-build package-release clean
 
