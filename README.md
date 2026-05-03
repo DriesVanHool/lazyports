@@ -6,6 +6,8 @@
 
 It gives you a fast TUI for browsing port bindings plus a focused CLI for listing and killing by port.
 
+<img src="screenshot.png" alt="Logo" width="1000"/>
+
 ## Features
 
 - TUI for browsing active port bindings
