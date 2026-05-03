@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -50,8 +51,9 @@ type loadMsg struct {
 }
 
 type killMsg struct {
-	pid int
-	err error
+	pid    int
+	result ports.TerminateResult
+	err    error
 }
 
 type viewMode string
@@ -69,6 +71,7 @@ type model struct {
 	searching   bool
 	detail      *ports.Entry
 	confirmKill *ports.Entry
+	forceKill   *ports.Entry
 	status      string
 	lastErr     error
 	width       int
@@ -138,6 +141,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyFilter()
 		return m, nil
 	case killMsg:
+		var needsForce ports.NeedsForceError
+		if errors.As(msg.err, &needsForce) {
+			if entry, ok := m.selectedEntry(); ok && entry.PID == msg.pid {
+				entryCopy := entry
+				m.forceKill = &entryCopy
+			} else if m.confirmKill != nil && m.confirmKill.PID == msg.pid {
+				entryCopy := *m.confirmKill
+				m.forceKill = &entryCopy
+			}
+			m.confirmKill = nil
+			m.lastErr = nil
+			m.status = fmt.Sprintf("PID %d ignored %s; confirm force kill", msg.pid, needsForce.GracePeriod)
+			return m, nil
+		}
 		if msg.err != nil {
 			m.lastErr = msg.err
 			m.status = ports.SummarizeKillError(msg.err)
@@ -146,7 +163,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.lastErr = nil
 		m.confirmKill = nil
-		m.status = fmt.Sprintf("Terminated PID %d", msg.pid)
+		m.forceKill = nil
+		if msg.result.Forced {
+			m.status = fmt.Sprintf("Force killed PID %d with %s", msg.pid, msg.result.Signal)
+		} else {
+			m.status = fmt.Sprintf("Terminated PID %d with %s", msg.pid, msg.result.Signal)
+		}
 		if m.detail != nil && m.detail.PID == msg.pid {
 			m.detail = nil
 		}
@@ -156,12 +178,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "y":
 				entry := *m.confirmKill
-				m.status = fmt.Sprintf("Killing PID %d...", entry.PID)
+				m.status = fmt.Sprintf("Sending %s to PID %d...", gracefulSignalLabel(), entry.PID)
 				m.lastErr = nil
-				return m, killPIDCmd(entry.PID)
+				return m, terminatePIDCmd(entry.PID)
 			case "n", "esc":
 				m.confirmKill = nil
-				m.status = "Kill cancelled"
+				m.status = "Terminate cancelled"
+				return m, nil
+			case "q", "ctrl+c":
+				return m, tea.Quit
+			}
+		}
+
+		if m.forceKill != nil {
+			switch msg.String() {
+			case "y":
+				entry := *m.forceKill
+				m.status = fmt.Sprintf("Force killing PID %d...", entry.PID)
+				m.lastErr = nil
+				return m, forceKillPIDCmd(entry.PID)
+			case "n", "esc":
+				m.forceKill = nil
+				m.status = "Force kill cancelled"
 				return m, nil
 			case "q", "ctrl+c":
 				return m, tea.Quit
@@ -229,6 +267,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				entryCopy := entry
 				m.confirmKill = &entryCopy
+				m.forceKill = nil
 				m.lastErr = nil
 				return m, nil
 			}
@@ -268,6 +307,9 @@ func (m model) View() string {
 	}
 	if m.confirmKill != nil {
 		return m.renderModal(base, renderKillConfirm(*m.confirmKill))
+	}
+	if m.forceKill != nil {
+		return m.renderModal(base, renderForceKillConfirm(*m.forceKill))
 	}
 	return base
 }
@@ -395,9 +437,10 @@ func renderDetail(entry ports.Entry) string {
 		renderField("PID", fmt.Sprintf("%d", entry.PID)),
 		renderField("Protocol", entry.Protocol),
 		renderField("Kind", string(entry.Kind)),
-		renderField("Local", entry.LocalAddress),
+		renderField("State", displayState(entry)),
+		renderField("Local", renderLocal(entry)),
 		renderField("Remote", renderRemote(entry)),
-		renderField("State", entry.State),
+		renderField("Summary", summarizeEntry(entry)),
 		renderField("Details", entry.Details),
 		"",
 		helpStyle.Render("Enter or Esc closes this panel."),
@@ -411,8 +454,26 @@ func renderKillConfirm(entry ports.Entry) string {
 		renderField("Process", entry.Process),
 		renderField("PID", fmt.Sprintf("%d", entry.PID)),
 		renderField("Port", fmt.Sprintf("%d", entry.Port)),
+		renderField("Local", renderLocal(entry)),
+		renderField("Protocol", entry.Protocol),
+		renderField("State", displayState(entry)),
+		renderField("Action", fmt.Sprintf("send %s and wait briefly", gracefulSignalLabel())),
 		"",
-		helpStyle.Render("y confirms termination  |  n cancels"),
+		helpStyle.Render("y sends a graceful terminate first  |  n cancels"),
+	}
+	return strings.Join(lines, "\n")
+}
+
+func renderForceKillConfirm(entry ports.Entry) string {
+	lines := []string{
+		modalTitleStyle.Render("Force Kill Required"),
+		renderField("Process", entry.Process),
+		renderField("PID", fmt.Sprintf("%d", entry.PID)),
+		renderField("Port", fmt.Sprintf("%d", entry.Port)),
+		renderField("Local", renderLocal(entry)),
+		renderField("Action", fmt.Sprintf("send %s immediately", forceSignalLabel())),
+		"",
+		helpStyle.Render("Process did not exit gracefully. y force kills  |  n leaves it running"),
 	}
 	return strings.Join(lines, "\n")
 }
@@ -424,9 +485,17 @@ func loadPortsCmd() tea.Cmd {
 	}
 }
 
-func killPIDCmd(pid int) tea.Cmd {
+func terminatePIDCmd(pid int) tea.Cmd {
 	return func() tea.Msg {
-		return killMsg{pid: pid, err: ports.KillPID(pid)}
+		result, err := ports.TerminatePID(context.Background(), pid, ports.TerminateOptions{})
+		return killMsg{pid: pid, result: result, err: err}
+	}
+}
+
+func forceKillPIDCmd(pid int) tea.Cmd {
+	return func() tea.Msg {
+		result, err := ports.TerminatePID(context.Background(), pid, ports.TerminateOptions{Force: true})
+		return killMsg{pid: pid, result: result, err: err}
 	}
 }
 
@@ -472,6 +541,13 @@ func (m model) modeLabel() string {
 	return "listeners"
 }
 
+func renderLocal(entry ports.Entry) string {
+	if entry.LocalAddress == "" {
+		return fmt.Sprintf(":%d", entry.Port)
+	}
+	return fmt.Sprintf("%s:%d", entry.LocalAddress, entry.Port)
+}
+
 func renderRemote(entry ports.Entry) string {
 	if entry.RemoteAddress == "" {
 		return "-"
@@ -480,6 +556,24 @@ func renderRemote(entry ports.Entry) string {
 		return fmt.Sprintf("%s:%d", entry.RemoteAddress, entry.RemotePort)
 	}
 	return entry.RemoteAddress
+}
+
+func summarizeEntry(entry ports.Entry) string {
+	if entry.Kind == ports.KindListener {
+		return fmt.Sprintf("%s listening on %s", entry.Process, renderLocal(entry))
+	}
+	return fmt.Sprintf("%s %s -> %s", entry.Protocol, renderLocal(entry), renderRemote(entry))
+}
+
+func gracefulSignalLabel() string {
+	if strings.EqualFold(forceSignalLabel(), "KILL") {
+		return "TERM"
+	}
+	return "TERM"
+}
+
+func forceSignalLabel() string {
+	return "KILL"
 }
 
 func kindBadge(kind ports.Kind) string {

@@ -12,6 +12,7 @@ It gives you a fast TUI for browsing port bindings plus a focused CLI for listin
 
 - TUI for browsing active port bindings
 - Fuzzy search with `/`
+- Safer termination: graceful stop first where supported, with explicit force-kill fallback
 - Kill the selected process with `k`
 - CLI commands for `list`, `kill`, and `version`
 - Cross-platform support for Linux, macOS, and Windows
@@ -53,6 +54,8 @@ lazyports
 lazyports list
 lazyports list --all
 lazyports kill 8080
+lazyports kill 8080 --graceful-only
+lazyports kill 8080 --force
 lazyports version
 ```
 
@@ -76,10 +79,22 @@ List listeners and active connections:
 lazyports list --all
 ```
 
-Kill every process bound to a port:
+Terminate every listening process bound to a port. By default, LazyPorts tries a graceful stop first and force kills only if needed:
 
 ```bash
 lazyports kill 8080
+```
+
+Only attempt graceful termination:
+
+```bash
+lazyports kill 8080 --graceful-only
+```
+
+Force kill immediately:
+
+```bash
+lazyports kill 8080 --force
 ```
 
 Run from source:
@@ -89,6 +104,8 @@ go run .
 go run . list
 go run . list --all
 go run . kill 8080
+go run . kill 8080 --graceful-only
+go run . kill 8080 --force
 go run . version
 ```
 
@@ -103,7 +120,7 @@ go install github.com/DriesVanHool/lazyports@latest
 - `/` start fuzzy search
 - `a` toggle between listeners and all connections
 - `r` refresh the port list
-- `k` kill the selected process
+- `k` terminate the selected process (graceful first, explicit force-kill fallback)
 - `Enter` show details for the selected row
 - `q` quit
 
