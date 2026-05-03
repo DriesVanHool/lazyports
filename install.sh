@@ -64,8 +64,8 @@ install_dir() {
 }
 
 download() {
-  url="$1"
-  output="$2"
+  local url="$1"
+  local output="$2"
   curl --proto '=https' --tlsv1.2 -fL --retry 3 --retry-delay 1 --connect-timeout 10 "$url" -o "$output"
 }
 
