@@ -1,6 +1,8 @@
-# LazyPorts
+<p align="center">
+  <img src="logo.png" alt="Logo" width="400"/>
+</p>
 
-LazyPorts is a terminal app for finding what is using your ports and stopping it quickly.
+**LazyPorts** is a terminal app for finding what is using your ports and stopping it quickly.
 
 It gives you a fast TUI for browsing port bindings plus a focused CLI for listing and killing by port.
 
