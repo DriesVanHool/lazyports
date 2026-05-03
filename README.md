@@ -1,8 +1,8 @@
 # LazyPorts
 
-LazyPorts is a chill little terminal app for finding what is hogging your ports and politely showing it the door.
+LazyPorts is a terminal app for finding what is using your ports and stopping it quickly.
 
-It gives you a fast TUI for browsing port bindings plus a small CLI for listing and killing by port.
+It gives you a fast TUI for browsing port bindings plus a focused CLI for listing and killing by port.
 
 ## Features
 
@@ -28,11 +28,26 @@ LAZYPORTS_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/DriesVanHo
 
 If `~/.local/bin` is not on your `PATH`, add it after install.
 
+Prefer to inspect the installer first:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DriesVanHool/lazyports/main/install.sh -o install.sh
+less install.sh
+bash install.sh
+```
+
+Install to a custom directory:
+
+```bash
+LAZYPORTS_INSTALL_DIR="$HOME/.local/bin" curl -fsSL https://raw.githubusercontent.com/DriesVanHool/lazyports/main/install.sh | bash
+```
+
 ## Quick Start
 
 ```bash
 lazyports
 lazyports list
+lazyports list --all
 lazyports kill 8080
 lazyports version
 ```
@@ -51,6 +66,12 @@ List active port bindings:
 lazyports list
 ```
 
+List listeners and active connections:
+
+```bash
+lazyports list --all
+```
+
 Kill every process bound to a port:
 
 ```bash
@@ -62,6 +83,7 @@ Run from source:
 ```bash
 go run .
 go run . list
+go run . list --all
 go run . kill 8080
 go run . version
 ```
@@ -75,6 +97,7 @@ go install github.com/DriesVanHool/lazyports@latest
 ## TUI Keys
 
 - `/` start fuzzy search
+- `a` toggle between listeners and all connections
 - `r` refresh the port list
 - `k` kill the selected process
 - `Enter` show details for the selected row
@@ -87,6 +110,16 @@ go install github.com/DriesVanHool/lazyports@latest
 - Windows: uses `netstat` and `tasklist`
 
 Some port listings and kill actions may require elevated privileges depending on the target process and OS.
+
+## Privacy And Safety
+
+- No telemetry
+- No analytics
+- No background network activity in the app itself
+- Port inspection happens locally on your machine using OS tools like `lsof`, `ss`, `netstat`, and `tasklist`
+- The installer only downloads release assets and `checksums.txt` from GitHub over HTTPS
+- The installer verifies the downloaded archive checksum before installing
+- Killing a process requires an explicit user action, and the TUI asks for confirmation
 
 ## Build
 

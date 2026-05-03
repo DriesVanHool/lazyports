@@ -14,7 +14,7 @@ test:
 	go test ./...
 
 fmt:
-	gofmt -w main.go internal/ports/ports.go internal/ui/ui.go
+	gofmt -w main.go internal/ports/*.go internal/ui/*.go
 
 cross-build:
 	mkdir -p $(DIST)

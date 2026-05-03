@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -eu
 
+umask 022
+
 REPO="DriesVanHool/lazyports"
 BIN_NAME="lazyports"
 
@@ -39,15 +41,75 @@ resolve_version() {
     return
   fi
 
-  curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | \
-    grep '"tag_name":' | head -n1 | sed -E 's/.*"([^"]+)".*/\1/'
+  latest_url="$(curl --proto '=https' --tlsv1.2 -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest")"
+  version="${latest_url##*/}"
+  if [ -z "$version" ] || [ "$version" = "latest" ]; then
+    printf 'error: could not resolve the latest release for %s\n' "$REPO" >&2
+    exit 1
+  fi
+  printf '%s' "$version"
 }
 
 install_dir() {
+  if [ "${LAZYPORTS_INSTALL_DIR:-}" != "" ]; then
+    printf '%s' "$LAZYPORTS_INSTALL_DIR"
+    return
+  fi
+
   if [ -w /usr/local/bin ]; then
     printf '/usr/local/bin'
   else
     printf '%s/.local/bin' "$HOME"
+  fi
+}
+
+download() {
+  url="$1"
+  output="$2"
+  curl --proto '=https' --tlsv1.2 -fL --retry 3 --retry-delay 1 --connect-timeout 10 "$url" -o "$output"
+}
+
+hash_file() {
+  file="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file"
+    return
+  fi
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$file"
+    return
+  fi
+
+  printf 'error: sha256sum or shasum is required for checksum verification\n' >&2
+  exit 1
+}
+
+verify_checksum() {
+  archive="$1"
+  checksums_file="$2"
+  archive_name="$(basename "$archive")"
+  expected_checksum=""
+
+  while IFS= read -r line; do
+    case "$line" in
+      *"  ${archive_name}")
+        expected_checksum="${line%% *}"
+        break
+        ;;
+    esac
+  done < "$checksums_file"
+
+  if [ -z "$expected_checksum" ]; then
+    printf 'error: checksum entry not found for %s\n' "${archive##*/}" >&2
+    exit 1
+  fi
+
+  actual_checksum="$(hash_file "$archive")"
+  actual_checksum="${actual_checksum%% *}"
+
+  if [ "$expected_checksum" != "$actual_checksum" ]; then
+    printf 'error: checksum verification failed for %s\n' "${archive##*/}" >&2
+    exit 1
   fi
 }
 
@@ -56,6 +118,7 @@ main() {
   need_cmd tar
   need_cmd install
   need_cmd mktemp
+  need_cmd grep
 
   os="$(detect_os)"
   arch="$(detect_arch)"
@@ -72,11 +135,14 @@ main() {
   esac
 
   url="https://github.com/${REPO}/releases/download/${version}/${archive}"
+  checksums_url="https://github.com/${REPO}/releases/download/${version}/checksums.txt"
   tmpdir="$(mktemp -d)"
   trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
   printf 'Installing %s %s for %s-%s\n' "$BIN_NAME" "$version" "$os" "$arch"
-  curl -fsSL "$url" -o "$tmpdir/$archive"
+  download "$checksums_url" "$tmpdir/checksums.txt"
+  download "$url" "$tmpdir/$archive"
+  verify_checksum "$tmpdir/$archive" "$tmpdir/checksums.txt"
   tar -xzf "$tmpdir/$archive" -C "$tmpdir"
 
   dest_dir="$(install_dir)"

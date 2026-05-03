@@ -33,7 +33,7 @@ func run(args []string) error {
 
 	switch args[0] {
 	case "list":
-		return runList(context.Background())
+		return runList(context.Background(), args[1:])
 	case "version", "--version", "-v":
 		printVersion()
 		return nil
@@ -62,8 +62,18 @@ func run(args []string) error {
 	}
 }
 
-func runList(ctx context.Context) error {
-	entries, err := ports.List(ctx)
+func runList(ctx context.Context, args []string) error {
+	options := ports.ListOptions{}
+	for _, arg := range args {
+		switch arg {
+		case "--all":
+			options.IncludeConnections = true
+		default:
+			return fmt.Errorf("unknown list option %q", arg)
+		}
+	}
+
+	entries, err := ports.List(ctx, options)
 	if err != nil {
 		return err
 	}
@@ -71,9 +81,9 @@ func runList(ctx context.Context) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	defer w.Flush()
 
-	fmt.Fprintln(w, "PORT\tPROCESS\tPID\tPROTOCOL\tSTATE")
+	fmt.Fprintln(w, "PORT\tPROCESS\tPID\tPROTOCOL\tSTATE\tKIND")
 	for _, entry := range entries {
-		fmt.Fprintf(w, "%d\t%s\t%d\t%s\t%s\n", entry.Port, entry.Process, entry.PID, entry.Protocol, entry.State)
+		fmt.Fprintf(w, "%d\t%s\t%d\t%s\t%s\t%s\n", entry.Port, entry.Process, entry.PID, entry.Protocol, entry.State, entry.Kind)
 	}
 
 	return nil
@@ -82,7 +92,8 @@ func runList(ctx context.Context) error {
 func printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  lazyports            Launch the interactive TUI")
-	fmt.Println("  lazyports list       Print current port bindings")
+	fmt.Println("  lazyports list       Print listening port bindings")
+	fmt.Println("  lazyports list --all Print listeners and active connections")
 	fmt.Println("  lazyports kill PORT  Kill all processes bound to PORT")
 	fmt.Println("  lazyports version    Print version information")
 }
