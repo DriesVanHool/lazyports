@@ -104,6 +104,41 @@ Force kill immediately:
 lazyports kill 8080 --force
 ```
 
+## Run From Source
+
+```bash
+go run .
+go run . list
+go run . list --all
+go run . kill 8080
+go run . version
+```
+
+## Build
+
+Build the local binary:
+
+```bash
+go build ./...
+```
+
+Create packaged release artifacts:
+
+```bash
+make cross-build
+make package-release VERSION=v0.1.0
+```
+
+## Release Artifacts
+
+Tagged releases publish platform builds such as:
+
+- `lazyports-linux-amd64.tar.gz`
+- `lazyports-darwin-amd64.tar.gz`
+- `lazyports-darwin-arm64.tar.gz`
+- `lazyports-windows-amd64.zip`
+- `checksums.txt`
+
 ## TUI Keys
 
 - `/` start fuzzy search
