@@ -63,12 +63,12 @@ func runKill(ctx context.Context, args []string) error {
 		case "--force":
 			opts.Force = true
 		case "--graceful-only":
-			opts.NoFallback = true
+			opts.GracefulOnly = true
 		default:
 			return fmt.Errorf("unknown kill option %q", arg)
 		}
 	}
-	if opts.Force && opts.NoFallback {
+	if opts.Force && opts.GracefulOnly {
 		return errors.New("--force and --graceful-only are mutually exclusive")
 	}
 
@@ -77,7 +77,7 @@ func runKill(ctx context.Context, args []string) error {
 		switch {
 		case opts.Force:
 			fmt.Printf("Force killed %d process(es) bound to port %d\n", terminated, port)
-		case opts.NoFallback:
+		case opts.GracefulOnly:
 			fmt.Printf("Gracefully terminated %d process(es) bound to port %d\n", terminated, port)
 		case forced > 0:
 			fmt.Printf("Terminated %d process(es) bound to port %d (%d required force kill fallback)\n", terminated, port, forced)

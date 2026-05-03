@@ -164,11 +164,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastErr = nil
 		m.confirmKill = nil
 		m.forceKill = nil
-		if msg.result.Forced {
-			m.status = fmt.Sprintf("Force killed PID %d with %s", msg.pid, msg.result.Signal)
-		} else {
-			m.status = fmt.Sprintf("Terminated PID %d with %s", msg.pid, msg.result.Signal)
-		}
+		m.status = formatKillStatus(msg.pid, msg.result)
 		if m.detail != nil && m.detail.PID == msg.pid {
 			m.detail = nil
 		}
@@ -566,21 +562,11 @@ func summarizeEntry(entry ports.Entry) string {
 }
 
 func gracefulSignalLabel() string {
-	if strings.EqualFold(forceSignalLabel(), "KILL") {
-		return "TERM"
-	}
 	return "TERM"
 }
 
 func forceSignalLabel() string {
 	return "KILL"
-}
-
-func kindBadge(kind ports.Kind) string {
-	if kind == ports.KindListener {
-		return "listen"
-	}
-	return "conn"
 }
 
 func displayState(entry ports.Entry) string {
@@ -627,6 +613,13 @@ func renderHelp(width int) string {
 
 func renderHelpItem(key, description string) string {
 	return keyStyle.Render(key) + " " + helpStyle.Render(description)
+}
+
+func formatKillStatus(pid int, result ports.TerminateResult) string {
+	if result.Forced {
+		return fmt.Sprintf("Force killed PID %d with %s", pid, result.Signal)
+	}
+	return fmt.Sprintf("Terminated PID %d with %s", pid, result.Signal)
 }
 
 func renderBanner(width, height int) string {

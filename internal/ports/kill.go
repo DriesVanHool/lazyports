@@ -9,13 +9,16 @@ import (
 	"time"
 )
 
-const defaultGracePeriod = 1500 * time.Millisecond
+const (
+	defaultGracePeriod = 1500 * time.Millisecond
+	defaultWaitInterval = 100 * time.Millisecond
+)
 
 type TerminateOptions struct {
 	GracePeriod  time.Duration
 	Force        bool
 	WaitInterval time.Duration
-	NoFallback   bool
+	GracefulOnly bool
 }
 
 type TerminateResult struct {
@@ -55,16 +58,10 @@ func TerminateByPort(ctx context.Context, port int, opts TerminateOptions) (term
 
 	var errs []error
 	for _, pid := range pids {
-		result, err := TerminatePID(ctx, pid, opts)
+		result, err := terminateWithFallback(ctx, pid, opts)
 		if err != nil {
-			var needsForce NeedsForceError
-			if errors.As(err, &needsForce) && !opts.Force && !opts.NoFallback {
-				result, err = TerminatePID(ctx, pid, TerminateOptions{Force: true})
-			}
-			if err != nil {
-				errs = append(errs, err)
-				continue
-			}
+			errs = append(errs, err)
+			continue
 		}
 		terminated++
 		if result.Forced {
@@ -78,12 +75,23 @@ func TerminateByPort(ctx context.Context, port int, opts TerminateOptions) (term
 	return terminated, forced, nil
 }
 
+func terminateWithFallback(ctx context.Context, pid int, opts TerminateOptions) (TerminateResult, error) {
+	result, err := TerminatePID(ctx, pid, opts)
+	if err == nil {
+		return result, nil
+	}
+
+	var needsForce NeedsForceError
+	if opts.Force || opts.GracefulOnly || !errors.As(err, &needsForce) {
+		return TerminateResult{}, err
+	}
+
+	return TerminatePID(ctx, pid, TerminateOptions{Force: true})
+}
+
 func TerminatePID(ctx context.Context, pid int, opts TerminateOptions) (TerminateResult, error) {
-	if opts.Force {
-		if err := signalProcess(pid, true); err != nil {
-			return TerminateResult{}, err
-		}
-		return TerminateResult{Signal: forceSignalName(), Forced: true}, nil
+	if opts.Force || !supportsGracefulTermination() {
+		return sendSignal(pid, true)
 	}
 
 	gracePeriod := opts.GracePeriod
@@ -92,17 +100,10 @@ func TerminatePID(ctx context.Context, pid int, opts TerminateOptions) (Terminat
 	}
 	waitInterval := opts.WaitInterval
 	if waitInterval <= 0 {
-		waitInterval = 100 * time.Millisecond
+		waitInterval = defaultWaitInterval
 	}
 
-	if !supportsGracefulTermination() {
-		if err := signalProcess(pid, true); err != nil {
-			return TerminateResult{}, err
-		}
-		return TerminateResult{Signal: forceSignalName(), Forced: true}, nil
-	}
-
-	if err := signalProcess(pid, false); err != nil {
+	if _, err := sendSignal(pid, false); err != nil {
 		return TerminateResult{}, err
 	}
 
@@ -115,6 +116,20 @@ func TerminatePID(ctx context.Context, pid int, opts TerminateOptions) (Terminat
 	}
 
 	return TerminateResult{Signal: gracefulSignalName()}, nil
+}
+
+func sendSignal(pid int, force bool) (TerminateResult, error) {
+	if err := signalProcess(pid, force); err != nil {
+		return TerminateResult{}, err
+	}
+	return TerminateResult{Signal: signalName(force), Forced: force}, nil
+}
+
+func signalName(force bool) string {
+	if force {
+		return forceSignalName()
+	}
+	return gracefulSignalName()
 }
 
 func waitForExit(ctx context.Context, pid int, gracePeriod, waitInterval time.Duration) (bool, error) {
