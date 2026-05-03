@@ -1,0 +1,4 @@
+dist/
+lazyports
+checksums.txt
+*.exe

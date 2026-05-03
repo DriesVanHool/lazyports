@@ -1,0 +1,56 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build release artifacts
+        env:
+          VERSION: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          mkdir -p dist
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          LDFLAGS="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}"
+
+          GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/lazyports-linux-amd64 .
+          GOOS=darwin GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/lazyports-darwin-amd64 .
+          GOOS=darwin GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/lazyports-darwin-arm64 .
+          GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/lazyports-windows-amd64.exe .
+
+          tar -C dist -czf dist/lazyports-linux-amd64.tar.gz lazyports-linux-amd64
+          tar -C dist -czf dist/lazyports-darwin-amd64.tar.gz lazyports-darwin-amd64
+          tar -C dist -czf dist/lazyports-darwin-arm64.tar.gz lazyports-darwin-arm64
+          zip -j dist/lazyports-windows-amd64.zip dist/lazyports-windows-amd64.exe
+
+          cd dist
+          sha256sum lazyports-*.tar.gz lazyports-*.zip > checksums.txt
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/lazyports-linux-amd64.tar.gz
+            dist/lazyports-darwin-amd64.tar.gz
+            dist/lazyports-darwin-arm64.tar.gz
+            dist/lazyports-windows-amd64.zip
+            dist/checksums.txt
