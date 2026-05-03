@@ -127,15 +127,7 @@ main() {
   need_cmd mktemp
   need_cmd grep
 
-  local os
-  local arch
-  local version
-  local archive
-  local url
-  local checksums_url
-  local tmpdir
-  local dest_dir
-  local binary_path
+  local os arch version archive url checksums_url tmpdir dest_dir binary_path
 
   os="$(detect_os)"
   arch="$(detect_arch)"
@@ -154,7 +146,7 @@ main() {
   url="https://github.com/${REPO}/releases/download/${version}/${archive}"
   checksums_url="https://github.com/${REPO}/releases/download/${version}/checksums.txt"
   tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' EXIT INT TERM
+  trap 'rm -rf "${tmpdir:-}"' EXIT INT TERM
 
   printf 'Installing %s %s for %s-%s\n' "$BIN_NAME" "$version" "$os" "$arch"
   download "$checksums_url" "$tmpdir/checksums.txt"
