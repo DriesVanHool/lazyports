@@ -6,7 +6,7 @@
 
 It gives you a fast TUI for browsing port bindings and a simple CLI for listing or terminating by port.
 
-<img src="screenshot.png" alt="LazyPorts screenshot" width="1000"/>
+<img src="lazyports.png" alt="LazyPorts screenshot" width="1000"/>
 
 ## Features
 
