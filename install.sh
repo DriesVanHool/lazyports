@@ -41,7 +41,9 @@ resolve_version() {
     return
   fi
 
+  local latest_url
   latest_url="$(curl --proto '=https' --tlsv1.2 -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest")"
+  local version
   version="${latest_url##*/}"
   if [ -z "$version" ] || [ "$version" = "latest" ]; then
     printf 'error: could not resolve the latest release for %s\n' "$REPO" >&2
@@ -70,7 +72,7 @@ download() {
 }
 
 hash_file() {
-  file="$1"
+  local file="$1"
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum "$file"
     return
@@ -85,8 +87,13 @@ hash_file() {
 }
 
 verify_checksum() {
-  archive="$1"
-  checksums_file="$2"
+  local archive="$1"
+  local checksums_file="$2"
+  local archive_name
+  local expected_checksum
+  local actual_checksum
+  local line
+
   archive_name="$(basename "$archive")"
   expected_checksum=""
 
@@ -119,6 +126,16 @@ main() {
   need_cmd install
   need_cmd mktemp
   need_cmd grep
+
+  local os
+  local arch
+  local version
+  local archive
+  local url
+  local checksums_url
+  local tmpdir
+  local dest_dir
+  local binary_path
 
   os="$(detect_os)"
   arch="$(detect_arch)"
